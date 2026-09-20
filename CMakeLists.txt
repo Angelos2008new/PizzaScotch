@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.21)
 
+#im prety sure that not how its need to be but ts is trying to use MSCV. there is been problems with string.h and target_compile_options(glad PRIVATE -Wno-unused-but-set-variable)
+set(CMAKE_C_COMPILER gcc)
+set(CMAKE_CXX_COMPILER g++)
+
+
 if(PLATFORM STREQUAL "ps3")
 set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/cmake/ppu.cmake)
 endif()

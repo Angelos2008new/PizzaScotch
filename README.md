@@ -8,7 +8,7 @@ oh well fuck you! i dont know what is working.
 
 ## Current goals
 
-### 20.09.2026 --start
+### 20.09.2026 - start
 the closest to me rn is Pizza Tower Demo 2. same bitecode as Undertale
 
 ## Contributing
