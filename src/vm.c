@@ -15,6 +15,8 @@
 
 #include "stb_ds.h"
 
+#include <assert.h>
+
 // ===[ Stack Operations ]===
 
 #ifdef ENABLE_VM_TRACING
@@ -58,7 +60,7 @@ static int gmlTypeNativeSize(uint8_t gmlType) {
 }
 
 static void stackPush(VMContext* ctx, RValue val) {
-    require(VM_STACK_SIZE > ctx->stack.top);
+    assert(VM_STACK_SIZE > ctx->stack.top);
 #ifdef ENABLE_VM_TRACING
     if (shouldTraceStack(ctx)) {
         char* valStr = RValue_toStringTyped(val);
@@ -79,9 +81,9 @@ static void stackPushTyped(VMContext* ctx, RValue val, uint8_t gmlStackType) {
 }
 
 static RValue stackPop(VMContext* ctx) {
-    require(ctx->stack.top > 0);
-    RValue val = ctx->stack.slots[--ctx->stack.top];
+    assert(ctx->stack.top > 0);
 #ifdef ENABLE_VM_TRACING
+    RValue val = ctx->stack.slots[--ctx->stack.top];
     if (shouldTraceStack(ctx)) {
         char* valStr = RValue_toStringTyped(val);
         char* stackBuf = formatStackContents(ctx);
@@ -89,22 +91,23 @@ static RValue stackPop(VMContext* ctx) {
         free(stackBuf);
         free(valStr);
     }
-#endif
     return val;
+#else
+    return ctx->stack.slots[--ctx->stack.top];
+#endif
 }
 
-// Helper function that calls stackPop and returns the result as an int32_t
-static int32_t stackPopInt32(VMContext* ctx) {
-    RValue rvalue = stackPop(ctx);
-    int32_t value = RValue_toInt32(rvalue);
-    RValue_free(&rvalue);
-    return value;
+// Helper function that pops from the stack and casts the result to an int32_t
+static inline int32_t stackPopInt32(VMContext* ctx) {
+    assert(ctx->stack.top > 0);
+    RValue rvalue = ctx->stack.slots[--ctx->stack.top];
+    return RValue_toInt32(rvalue);
 }
 
 #if IS_WAD17_OR_HIGHER_ENABLED
 
 static RValue* stackPeek(VMContext* ctx) {
-    require(ctx->stack.top > 0);
+    assert(ctx->stack.top > 0);
     return &ctx->stack.slots[ctx->stack.top - 1];
 }
 
@@ -3044,7 +3047,25 @@ static RValue executeLoop(VMContext* ctx) {
             }
             case OP_PUSHGLB: {
                 uint32_t varRef = resolveVarOperand(extraData);
-                // TODO: Re-add fast-path here!
+                uint8_t varType = (uint8_t) ((varRef >> 24) & 0xF8);
+                if (varType == VARTYPE_NORMAL) {
+                    Variable* varDef = resolveVarDef(ctx, varRef);                                                                           
+                    if (varDef->varID >= 0) {
+                        Instance* inst = ctx->globalScopeInstance;
+                        if (inst != nullptr) {
+                            RValue* slot = IntRValueHashMap_findSlot(&inst->selfVars, varDef->varID);
+                            if (slot != nullptr) {
+                                RValue val = *slot;
+                                val.ownsReference = false;
+                                stackPushTyped(ctx, val, GML_TYPE_VARIABLE);
+#ifdef ENABLE_VM_TRACING
+                                VM_checkIfVariableShouldBeTracedAndLog(ctx, "global", nullptr, varDef->name, val, false, -1, -1, "");
+#endif
+                                break;
+                            }
+                        }
+                    }
+                }
                 RValue val = resolveVariableRead(ctx, INSTANCE_GLOBAL, varRef);
                 stackPushTyped(ctx, val, GML_TYPE_VARIABLE);
                 break;
