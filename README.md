@@ -18,6 +18,12 @@ Normal Pizza Tower will never work fully properly becouse of fmod. Thats why we 
 
 You remeber that one meme like "Super Mario on PS4". So this will be "Pizza Tower for Xbox 360". but firstly we need to run tower on normal machine.
 
+### 21.09.2026 - but an hour after.
+
+Its runs... there is problems with collsions (slope is not working properly) and depth is screwed but its works! 
+
+i hate it here. and is still changed nothing in code!
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first
@@ -28,11 +34,4 @@ im gona just leave this here (im stealing it from some kind of website).
 
 ## Quote of the README.md update:
 
-Shit-truck, shit-truck, shit-truck
-Can't scrub the shit off the truck
-Even if you douse it in the perfume
-It keeps on stinking the same
-Shit-cleaner, shit-cleaner, shit-cleaner
-Must be tough and broad-leaner
-Shit-cleaner—a charmer of shit!
-People need him in every time
+Oh, come on!
