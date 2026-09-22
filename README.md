@@ -24,6 +24,10 @@ Its runs... there is problems with collsions (slope is not working properly) and
 
 i hate it here. and is still changed nothing in code!
 
+### 22.09.2026
+
+[PizzaTowerXbox360](https://github.com/Angelos2008new/PizzaTowerXbox360) - is Pizza Tower Grape Engine (LTS2026) but edited to work better with Butterscotch better. As for the time writing it its just has collision system from Pizza Tower (Steam release). Based of my slightly edited version of Grape Engine.
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first
@@ -34,4 +38,4 @@ im gona just leave this here (im stealing it from some kind of website).
 
 ## Quote of the README.md update:
 
-Oh, come on!
+What a shit load of fuck!
