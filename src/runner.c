@@ -1833,7 +1833,7 @@ static void initRoom(Runner* runner, int32_t roomIndex) {
 
     // In GMS2, instances get their depth from their room layer, not the object definition.
     // This must happen before firing Create events so scripts like scr_depth() read the layer depth.
-    if (DataWin_isVersionAtLeast(runner->dataWin, 2, 0, 0, 0)) {
+    if (DataWin_isVersionAtLeast(runner->dataWin, 2, 0, 0, 0) && DataWin_isVersionOlder(runner->dataWin, 2024, 14, 0, 0))
         repeat(room->layerCount, li) {
             RoomLayer* layer = &room->layers[li];
             if (layer->type != RoomLayerType_Instances || layer->instancesData == nullptr) continue;
