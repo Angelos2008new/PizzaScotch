@@ -8683,6 +8683,7 @@ static RValue builtin_joystick_axes(VMContext* ctx, RValue* args, MAYBE_UNUSED i
 // Window stubs
 STUB_RETURN_ZERO(window_get_fullscreen)
 STUB_RETURN_UNDEFINED(window_set_fullscreen)
+
 static RValue builtin_window_get_width(VMContext* ctx, MAYBE_UNUSED RValue* args, MAYBE_UNUSED int32_t argCount) {
     Runner* runner = ctx->runner;
     if (runner != nullptr && runner->getWindowSize != nullptr) {
@@ -20932,8 +20933,6 @@ static bool vertexBufferGetWritablePtr(Buffer_Vertex* buffer, int32_t* outOffset
         return false;
     }
 
-    printf("[%s] Obtained writable pointer for vertex buffer at offset %d\n", functionName, *outOffset);
-
     *outPtr = buffer->buffer.pBuffer8 + *outOffset;
     return true;
 }
@@ -21036,15 +21035,6 @@ static RValue builtin_vertex_color(MAYBE_UNUSED VMContext* ctx, RValue* args, in
     } else {
         finalColor = (color & 0xffffffu) | ((uint32_t) alphaInt << 24);
     }
-
-        printf("[vertex_color] Writing color 0x%08X to vertex buffer %d at offset %d (bytes: %02X %02X %02X %02X)\n",
-            finalColor,
-            bufferIndex,
-            dataOffset,
-            (unsigned int) (finalColor & 0xFFu),
-            (unsigned int) ((finalColor >> 8) & 0xFFu),
-            (unsigned int) ((finalColor >> 16) & 0xFFu),
-            (unsigned int) ((finalColor >> 24) & 0xFFu));
 
     *(uint32_t*) (buffer->buffer.pBuffer8 + dataOffset) = finalColor;
     return RValue_makeUndefined();
