@@ -20,6 +20,18 @@
 #pragma GCC diagnostic pop
 #endif
 
+// You may be wondering wtf is this:
+// The web version tries to load audio from onaudioprocess, that onaudioprocess tries reading files from OSPF
+// Because the onaudioprocess is not JSPI-aware, the entire game CRASHES AND BURNS
+// So instead of doing that, we just load everything up front
+#ifdef __EMSCRIPTEN__
+#define BS_SOUND_FLAG_STREAM 0
+#define BS_SOUND_FLAG_ASYNC  0
+#else
+#define BS_SOUND_FLAG_STREAM MA_SOUND_FLAG_STREAM
+#define BS_SOUND_FLAG_ASYNC  MA_SOUND_FLAG_ASYNC
+#endif
+
 #include "ma_audio_system.h"
 #include "data_win.h"
 #include "utils.h"
@@ -247,7 +259,7 @@ static int32_t maPlaySound(AudioSystem* audio, int32_t soundIndex, int32_t prior
 
     if (isStream) {
         // Stream audio: load from file path stored in stream entry
-        result = ma_sound_init_from_file(&ma->engine, streamPath, MA_SOUND_FLAG_STREAM, &ma->listenerGroups[0], nullptr, &slot->maSound);
+        result = ma_sound_init_from_file(&ma->engine, streamPath, BS_SOUND_FLAG_STREAM, &ma->listenerGroups[0], nullptr, &slot->maSound);
         if (result != MA_SUCCESS) {
             logWarn("Audio: Failed to load stream file '%s' (error %d)\n", streamPath, result);
             return -1;
@@ -292,7 +304,7 @@ static int32_t maPlaySound(AudioSystem* audio, int32_t soundIndex, int32_t prior
                 return -1;
             }
 
-            result = ma_sound_init_from_file(&ma->engine, path, MA_SOUND_FLAG_ASYNC, &ma->listenerGroups[0], nullptr, &slot->maSound);
+            result = ma_sound_init_from_file(&ma->engine, path, BS_SOUND_FLAG_ASYNC, &ma->listenerGroups[0], nullptr, &slot->maSound);
             if (result != MA_SUCCESS) {
                 logWarn("Audio: Failed to load file for '%s' at '%s' (error %d)\n", sound->name, path, result);
                 free(path);

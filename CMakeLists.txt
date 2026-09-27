@@ -579,6 +579,11 @@ if(PLATFORM STREQUAL "cli" OR PLATFORM STREQUAL "vita" OR PLATFORM STREQUAL "swi
                 "-sALLOW_MEMORY_GROWTH"
                 "-sINVOKE_RUN=0"
                 "-sJSPI"
+                # Useful to know when a stack overflow (that is, the WASM stack) happens
+                "-sSTACK_OVERFLOW_CHECK=2"
+                # Increases the stack size, needed because for some reason MiniAudio causes a stack overflow in DELTARUNE
+                # "Aborted(stack overflow (Attempt to set SP to 0xfffff640, with stack limits [0x00000000 - 0x00010000]). If you require more stack space build with -sSTACK_SIZE=<bytes>)"
+                "-sSTACK_SIZE=1MB"
         )
     endif()
     if(BACKEND STREQUAL "appkit")
