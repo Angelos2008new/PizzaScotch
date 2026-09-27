@@ -192,21 +192,4 @@ object ButterscotchNative {
     fun onGameSizeChanged(width: Int, height: Int) {
         currentGameSize = IntSize(width, height)
     }
-
-    /**
-     * Flips true when the runner has exited (either the game requested quit, or [ButterscotchDroidRunner] tore
-     * it down on user request). The Activity observes this and calls finish().
-     */
-    var hasExited: Boolean by mutableStateOf(false)
-        private set
-
-    internal fun markExited() {
-        hasExited = true
-    }
-
-    /** Clear the exit latch — process-singleton state, so a previous session would otherwise
-     *  immediately finish a freshly-launched GameActivity. */
-    fun resetExitLatch() {
-        hasExited = false
-    }
 }

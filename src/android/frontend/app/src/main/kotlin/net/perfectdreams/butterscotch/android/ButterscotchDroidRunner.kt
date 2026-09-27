@@ -31,6 +31,7 @@ import java.util.concurrent.Executors
 
 // The Butterscotch Android API is actually "global bound", but we use a class to help managing things here (and will be useful if we refactor down the road)
 class ButterscotchDroidRunner(
+    val activity: GameActivity,
     val assets: AssetManager,
     val dataWinPath: String,
     val wadHash: Long,
@@ -239,7 +240,7 @@ class ButterscotchDroidRunner(
 
                         ButterscotchNative.BUTTERSCOTCH_DROID_SHOULD_EXIT -> {
                             // Game requested exit
-                            requestExitInternal()
+                            this@ButterscotchDroidRunner.activity.requestedExit = true
                             break
                         }
                         
@@ -288,7 +289,6 @@ class ButterscotchDroidRunner(
     fun requestExitInternal() {
         ButterscotchNative.stopRunner()
         egl.teardown()
-        ButterscotchNative.markExited()
 
         renderJob = null
         started = false
