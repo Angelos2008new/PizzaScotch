@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include "string_compat.h"
 #include <inttypes.h>
+#include <math.h>
 #include <audsrv.h>
 
 // ===[ IMA ADPCM Tables ]===
@@ -353,6 +354,18 @@ static uint16_t getMusicStreamSampleRate(Ps2AudioSystem* ps2, Ps2MusicStream* st
 
 // ===[ Software Mixer ]===
 
+static float spatialGain(const AudioSystem* audio, bool spatial, float x, float y, float z, float ref, float max, float factor) {
+    if (!spatial || factor <= 0) return 1.0f;
+    float dx = x - audio->listenerX;
+    float dy = y - audio->listenerY;
+    float dz = z - audio->listenerZ;
+    float distance = sqrtf(dx * dx + dy * dy + dz * dz);
+    if (distance > max) distance = max;
+    if (distance <= ref) return 1.0f;
+    float denominator = ref + factor * (distance - ref);
+    return denominator > 0 ? ref / denominator : 1.0f;
+}
+
 static void mixAudio(Ps2AudioSystem* ps2, int16_t* outBuf, int32_t samplePairs) {
     int32_t* accum = ps2->mixAccum;
     memset(accum, 0, samplePairs * sizeof(int32_t));
@@ -380,7 +393,9 @@ static void mixAudio(Ps2AudioSystem* ps2, int16_t* outBuf, int32_t samplePairs) 
         uint32_t totalSamples = inst->totalSamples;
         bool loop = inst->loop;
         float gain = inst->currentGain * inst->sondVolume * ps2->masterGain *
-                     AudioSystem_soundGroupGain(&ps2->base, inst->soundIndex);
+            spatialGain(&ps2->base, inst->spatial, inst->spatialX, inst->spatialY, inst->spatialZ,
+                        inst->falloffRef, inst->falloffMax, inst->falloffFactor) *
+            AudioSystem_soundGroupGain(&ps2->base, inst->soundIndex);
         int32_t gainQ15 = (int32_t) (gain * 32768.0f);
         Ps2AudoEntry* audo = &ps2->audoEntries[inst->audoIndex];
         float stepRate = inst->pitch * inst->sondPitch * ((float) audo->sampleRate / (float) AUDSRV_OUTPUT_FREQ);
@@ -451,7 +466,9 @@ static void mixAudio(Ps2AudioSystem* ps2, int16_t* outBuf, int32_t samplePairs) 
 
         // Hoist per-stream constants (pitch/sampleRate don't change mid-mix)
         float gain = stream->currentGain * stream->sondVolume * ps2->masterGain *
-                     AudioSystem_soundGroupGain(&ps2->base, stream->soundIndex);
+            spatialGain(&ps2->base, stream->spatial, stream->spatialX, stream->spatialY, stream->spatialZ,
+                        stream->falloffRef, stream->falloffMax, stream->falloffFactor) *
+            AudioSystem_soundGroupGain(&ps2->base, stream->soundIndex);
         int32_t gainQ15 = (int32_t) (gain * 32768.0f);
         uint16_t streamSampleRate = getMusicStreamSampleRate(ps2, stream);
         float stepRate = stream->pitch * stream->sondPitch * ((float) streamSampleRate / (float) AUDSRV_OUTPUT_FREQ);
@@ -695,11 +712,9 @@ static int32_t ps2PlaySound(AudioSystem* audio, int32_t soundIndex, int32_t prio
 
         // Find a free music stream slot
         Ps2MusicStream* stream = nullptr;
-        int streamSlot = -1;
         repeat(MAX_MUSIC_STREAMS, i) {
             if (!ps2->musicStreams[i].active) {
                 stream = &ps2->musicStreams[i];
-                streamSlot = i;
                 break;
             }
         }
@@ -708,7 +723,7 @@ static int32_t ps2PlaySound(AudioSystem* audio, int32_t soundIndex, int32_t prio
             return -1;
         }
 
-        int32_t instanceId = PS2_SOUND_INSTANCE_ID_BASE + MAX_PS2_SOUND_INSTANCES + streamSlot;
+        int32_t instanceId = PS2_SOUND_INSTANCE_ID_BASE + ps2->nextInstanceCounter++;
 
         memset(stream, 0, sizeof(Ps2MusicStream));
         stream->active = true;
@@ -782,11 +797,9 @@ static int32_t ps2PlaySound(AudioSystem* audio, int32_t soundIndex, int32_t prio
         // ===[ Streaming music path ]===
         // Find a free music stream slot
         Ps2MusicStream* stream = nullptr;
-        int streamSlot = -1;
         repeat(MAX_MUSIC_STREAMS, i) {
             if (!ps2->musicStreams[i].active) {
                 stream = &ps2->musicStreams[i];
-                streamSlot = i;
                 break;
             }
         }
@@ -798,8 +811,8 @@ static int32_t ps2PlaySound(AudioSystem* audio, int32_t soundIndex, int32_t prio
 
         Ps2AudoEntry* audo = &ps2->audoEntries[sond->audoIndex];
 
-        // Use a separate ID range for music streams (offset by MAX_PS2_SOUND_INSTANCES)
-        int32_t instanceId = PS2_SOUND_INSTANCE_ID_BASE + MAX_PS2_SOUND_INSTANCES + streamSlot;
+        // Unique IDs prevent a stopped emitter voice from referring to a reused stream slot.
+        int32_t instanceId = PS2_SOUND_INSTANCE_ID_BASE + ps2->nextInstanceCounter++;
 
         memset(stream, 0, sizeof(Ps2MusicStream));
         stream->active = true;
@@ -854,6 +867,7 @@ static int32_t ps2PlaySound(AudioSystem* audio, int32_t soundIndex, int32_t prio
         return -1;
     }
 
+    slot->spatial = false;
     slot->active = true;
     slot->soundIndex = soundIndex;
     slot->audoIndex = sond->audoIndex;
@@ -984,6 +998,30 @@ static void actionSetPitch(Ps2SoundInstance* sfx, Ps2MusicStream* music, void* u
 static void ps2StopSound(AudioSystem* audio, int32_t soundOrInstance) {
     // logInfo("PS2AudioSystem: Stopping sound %d\n", soundOrInstance);
     forEachInstance((Ps2AudioSystem*) audio, soundOrInstance, actionStop, nullptr);
+}
+
+static void ps2SetSoundSpatial(AudioSystem* audio, int32_t instanceId, float x, float y, float z, float ref, float max, float factor) {
+    Ps2AudioSystem* ps2 = (Ps2AudioSystem*)audio;
+    Ps2SoundInstance* sfx = findSfxInstanceById(ps2, instanceId);
+    Ps2MusicStream* music = findMusicStreamById(ps2, instanceId);
+    if (sfx != nullptr) {
+        sfx->spatial = true;
+        sfx->spatialX = x; sfx->spatialY = y; sfx->spatialZ = z;
+        sfx->falloffRef = ref > 0 ? ref : 0.0001f;
+        sfx->falloffMax = max > 0 ? max : 0.0001f;
+        sfx->falloffFactor = factor;
+    }
+    if (music != nullptr) {
+        music->spatial = true;
+        music->spatialX = x; music->spatialY = y; music->spatialZ = z;
+        music->falloffRef = ref > 0 ? ref : 0.0001f;
+        music->falloffMax = max > 0 ? max : 0.0001f;
+        music->falloffFactor = factor;
+    }
+}
+
+static void ps2SetListenerPosition(MAYBE_UNUSED AudioSystem* audio, MAYBE_UNUSED float x, MAYBE_UNUSED float y, MAYBE_UNUSED float z) {
+    // The mixer reads the listener coordinates stored in AudioSystem.
 }
 
 static void ps2StopAll(AudioSystem* audio) {
@@ -1337,6 +1375,8 @@ Ps2AudioSystem* Ps2AudioSystem_create(void) {
     ps2AudioSystemVtable.destroy = ps2Destroy;
     ps2AudioSystemVtable.update = ps2Update;
     ps2AudioSystemVtable.playSound = ps2PlaySound;
+    ps2AudioSystemVtable.setSoundSpatial = ps2SetSoundSpatial;
+    ps2AudioSystemVtable.setListenerPosition = ps2SetListenerPosition;
     ps2AudioSystemVtable.stopSound = ps2StopSound;
     ps2AudioSystemVtable.stopAll = ps2StopAll;
     ps2AudioSystemVtable.isPlaying = ps2IsPlaying;
