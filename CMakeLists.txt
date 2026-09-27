@@ -345,6 +345,8 @@ if(PLATFORM STREQUAL "cli" OR PLATFORM STREQUAL "vita" OR PLATFORM STREQUAL "swi
         set(VM_TRACING_DEFAULT OFF)
         set(VM_OPCODE_PROFILER_DEFAULT OFF)
         set(VM_STUB_LOGS_DEFAULT OFF)
+    elseif(PLATFORM STREQUAL "web")
+        add_compile_definitions(PLATFORM_WEB)
     else()
         set(VM_GML_PROFILER_DEFAULT ON)
         set(VM_TRACING_DEFAULT ON)
