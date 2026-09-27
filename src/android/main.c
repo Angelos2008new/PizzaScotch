@@ -833,7 +833,7 @@ JNIEXPORT void JNICALL JNI_FN(setActiveLogFile)(JNIEnv* env, MAYBE_UNUSED jclass
         }
 
         gLog = fopen(logPath, "w");
-        setvbuf(gLog, nullptr, _IOLBF, 0);
+        setbuf(gLog, nullptr);
         (*env)->ReleaseStringUTFChars(env, jLogPath, logPath);
         return;
     } else {
