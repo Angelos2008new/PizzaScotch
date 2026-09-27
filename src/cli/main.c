@@ -125,7 +125,7 @@ static void printUsage(const char *argv0) {
         "    --load-type <type>                     - Specify how data.win is loaded, per-chunk or all at once\n"
         "    --disable-log-colours                  - Disable colours for warning, error, and debug logs\n"
         "    --disable-log-colors                   - Same as --disable-log-colours, but different spelling\n"
-#ifdef EABLE_VM_OPCODE_PROFILER
+#ifdef ENABLE_VM_OPCODE_PROFILER
         "    --profile-opcodes                      - Rank which GML opcodes were executed the most\n"
 #endif
         , argv0
