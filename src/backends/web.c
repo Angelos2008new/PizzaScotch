@@ -1,6 +1,7 @@
 #include "gettime.h"
 #include "runner.h"
 #include "loop.h"
+#include "../cli/args.h"
 #include <time.h>
 #include <errno.h>
 #include <emscripten.h>
@@ -24,19 +25,15 @@ int mountOpfs() {
 }
 
 int main(MAYBE_UNUSED int argc, char *argv[]) {
-    CommandLineArgs args = { 0 };
-    args.debug = false;
-    args.speedMultiplier = 1;
-    args.exitAtFrame = -1;
-    args.renderer = MODERN_GL;
-    args.dataWinPath = argv[1];
-    args.saveFolder = argv[2];
+    setbuf(stderr, NULL);
 
     mountOpfs();
-
-    loop(args, nullptr);
-
-    return 0;
+    
+    CommandLineArgs args;
+    parseCommandLineArgs(&args, argc, argv);
+    int ret = loop(args, argv[0]);
+    freeCommandLineArgs(&args);
+    return ret;
 }
 
 void platformLog(MAYBE_UNUSED const logType type, const char *format, va_list va) {
