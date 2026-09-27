@@ -135,9 +135,6 @@ static void throwJavaException(JNIEnv* env, const char* exceptionClazz, const ch
 }
 
 JNIEXPORT void JNICALL JNI_FN(init)(MAYBE_UNUSED JNIEnv* env, MAYBE_UNUSED jclass cls) {
-    // Set stdout and stderr to not be buffered
-    setvbuf(stdout, nullptr, _IOLBF, 0);
-    setvbuf(stderr, nullptr, _IONBF, 0);
     __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "Butterscotch native init");
 }
 
@@ -836,6 +833,7 @@ JNIEXPORT void JNICALL JNI_FN(setActiveLogFile)(JNIEnv* env, MAYBE_UNUSED jclass
         }
 
         gLog = fopen(logPath, "w");
+        setvbuf(gLog, nullptr, _IOLBF, 0);
         (*env)->ReleaseStringUTFChars(env, jLogPath, logPath);
         return;
     } else {
