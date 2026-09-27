@@ -824,11 +824,7 @@ JNIEXPORT void JNICALL JNI_FN(stopRunner)(MAYBE_UNUSED JNIEnv* env, MAYBE_UNUSED
 }
 
 JNIEXPORT void JNICALL JNI_FN(setActiveLogFile)(JNIEnv* env, MAYBE_UNUSED jclass cls, jstring jLogPath) {
-    __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "I'M CALLING setActiveLogFile");
-
     if (jLogPath != nullptr) {
-        __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "I'M CALLING WITH NON-NULL jLogPath (yayy)");
-
         const char* logPath = (*env)->GetStringUTFChars(env, jLogPath, nullptr);
         if (gLog != nullptr) {
             throwJavaException(env, "java/lang/IllegalStateException", "Trying to set a log file when there's already a log file active!");
@@ -841,8 +837,6 @@ JNIEXPORT void JNICALL JNI_FN(setActiveLogFile)(JNIEnv* env, MAYBE_UNUSED jclass
         (*env)->ReleaseStringUTFChars(env, jLogPath, logPath);
         return;
     } else {
-        __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "I'M CALLING WITH NULL jLogPath");
-
         fclose(gLog);
         gLog = nullptr;
     }
