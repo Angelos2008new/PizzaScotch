@@ -326,7 +326,7 @@ if(ENABLE_VM_EXCEPTIONS_LOGS)
     add_compile_definitions(ENABLE_VM_EXCEPTIONS_LOGS)
 endif()
 
-if(PLATFORM STREQUAL "cli" OR PLATFORM STREQUAL "vita" OR PLATFORM STREQUAL "switch")
+if(PLATFORM STREQUAL "cli" OR PLATFORM STREQUAL "vita" OR PLATFORM STREQUAL "switch" OR PLATFORM STREQUAL "web")
     if(PLATFORM STREQUAL "vita")
         # Normally, __VITA__ should already be defined, but for some reason,
         # in my case, this didn't really work... so just in case, when we're
@@ -557,6 +557,27 @@ if(PLATFORM STREQUAL "cli" OR PLATFORM STREQUAL "vita" OR PLATFORM STREQUAL "swi
         else()
             nx_create_nro(butterscotch NACP Butterscotch.nacp)
         endif()
+    elseif (PLATFORM STREQUAL "web")
+        set_target_properties(butterscotch PROPERTIES SUFFIX ".mjs")
+
+        target_link_options(
+                butterscotch
+                PRIVATE
+                "-sMODULARIZE=1"
+                "-sEXPORT_ES6=1"
+                "-sENVIRONMENT=web"
+                "-sWASMFS=1"
+                "-sEXPORTED_RUNTIME_METHODS=['callMain', 'HEAP8', 'HEAPU8', 'HEAPF32', 'ccall', 'cwrap', 'specialHTMLTargets', 'UTF8ToString']"
+                "-sEXPORTED_FUNCTIONS=['_main', '_onKeyDown', '_onKeyUp']"
+                "-sOFFSCREENCANVAS_SUPPORT=1"
+                "-sOFFSCREEN_FRAMEBUFFER=1"
+                "-sMIN_WEBGL_VERSION=2"
+                "-sMAX_WEBGL_VERSION=2"
+                "-sFULL_ES3=1"
+                "-sALLOW_MEMORY_GROWTH"
+                "-sINVOKE_RUN=0"
+                "-sJSPI"
+        )
     endif()
     if(BACKEND STREQUAL "appkit")
         target_sources(butterscotch PRIVATE src/backends/${BACKEND}.m)
@@ -581,42 +602,6 @@ if(PLATFORM STREQUAL "cli" OR PLATFORM STREQUAL "vita" OR PLATFORM STREQUAL "swi
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${CMAKE_SOURCE_DIR}/vendor/gamecontrollerdb.txt
             $<TARGET_FILE_DIR:butterscotch>/gamecontrollerdb.txt
-    )
-elseif(PLATFORM STREQUAL "web")
-    if (NOT ENABLE_MODERN_GL)
-        message(FATAL_ERROR "Web requires modern gl!")
-    endif()
-    file(GLOB GL_SOURCES src/gl/*.c src/gl_common/*.c src/image/*.c src/debug_font/*.c)
-    target_sources(butterscotch PRIVATE ${GL_SOURCES})
-    target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/gl)
-    target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/gl_common)
-    target_include_directories(butterscotch PRIVATE ${CMAKE_SOURCE_DIR}/src/image)
-
-    # stb_image
-    target_include_directories(butterscotch PUBLIC vendor/stb/image)
-
-    # bzip2
-    target_link_libraries(butterscotch PRIVATE bzip2 stb_ds sha1 stb_vorbis)
-
-    set_target_properties(butterscotch PROPERTIES SUFFIX ".mjs")
-
-    target_link_options(
-            butterscotch
-            PRIVATE
-            "-sMODULARIZE=1"
-            "-sEXPORT_ES6=1"
-            "-sENVIRONMENT=web"
-            "-sWASMFS=1"
-            "-sEXPORTED_RUNTIME_METHODS=['callMain', 'HEAP8', 'HEAPU8', 'HEAPF32', 'ccall', 'cwrap', 'specialHTMLTargets', 'UTF8ToString']"
-            "-sEXPORTED_FUNCTIONS=['_main', '_onKeyDown', '_onKeyUp']"
-            "-sOFFSCREENCANVAS_SUPPORT=1"
-            "-sOFFSCREEN_FRAMEBUFFER=1"
-            "-sMIN_WEBGL_VERSION=2"
-            "-sMAX_WEBGL_VERSION=2"
-            "-sFULL_ES3=1"
-            "-sALLOW_MEMORY_GROWTH"
-            "-sINVOKE_RUN=0"
-            "-sJSPI"
     )
 elseif(PLATFORM STREQUAL "android")
     if (NOT ENABLE_MODERN_GL)
