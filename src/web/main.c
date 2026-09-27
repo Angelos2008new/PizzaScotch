@@ -23,16 +23,17 @@ int mountOpfs() {
     return 0;
 }
 
-int main() {
-    printf("Howdy! Loritta is so cute!!\n");
-
+int main(MAYBE_UNUSED int argc, char *argv[]) {
     CommandLineArgs args = { 0 };
     args.debug = false;
     args.speedMultiplier = 1;
     args.exitAtFrame = -1;
     args.renderer = MODERN_GL;
+    args.dataWinPath = argv[1];
+    args.saveFolder = argv[2];
+
     mountOpfs();
-    args.dataWinPath = "/butterscotch/games/ce4b4781-5842-49fc-a175-1ddc6ec99c35/data.win";
+
     loop(args, nullptr);
 
     return 0;
@@ -50,9 +51,9 @@ static int gKeyUpCount;
 static int gKeyDownCount;
 
 static Runner* gRunner = NULL;
-static int32_t g_width = 0;
-static int32_t g_height = 0;
-static bool g_initialized = false;
+static int32_t gWidth = 0;
+static int32_t gHeight = 0;
+static bool gInitialized = false;
 
 bool platformInit(int32_t reqW, int32_t reqH, MAYBE_UNUSED const char *title, MAYBE_UNUSED bool headless) {
     EmscriptenWebGLContextAttributes attrs;
@@ -79,10 +80,10 @@ bool platformInit(int32_t reqW, int32_t reqH, MAYBE_UNUSED const char *title, MA
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    g_width = reqW > 0 ? reqW : 640;
-    g_height = reqH > 0 ? reqH : 480;
-    g_initialized = true;
-    logInfo("No-op platform backend: %dx%d (no window)\n", g_width, g_height);
+    gWidth = reqW > 0 ? reqW : 640;
+    gHeight = reqH > 0 ? reqH : 480;
+    gInitialized = true;
+
     return true;
 }
 
@@ -90,7 +91,6 @@ void onKeyUp(int keyCode) {
     if (gKeyUpCount == MAX_KEY_QUEUE)
         return;
 
-    printf("You released a key!\n");
     gKeyUpQueue[gKeyUpCount++] = keyCode;
 }
 
@@ -98,12 +98,11 @@ void onKeyDown(int keyCode) {
     if (gKeyDownCount == MAX_KEY_QUEUE)
         return;
 
-    printf("You pressed a key!\n");
     gKeyDownQueue[gKeyDownCount++] = keyCode;
 }
 
 void platformExit(void) {
-    g_initialized = false;
+    gInitialized = false;
 }
 
 void platformInitFunctions(Runner *runner) {
@@ -114,9 +113,9 @@ void platformInitFunctions(Runner *runner) {
 
 bool platformGetWindowSize(int32_t *outW, int32_t *outH) {
     if (!outW || !outH) return false;
-    if (!g_initialized) return false;
-    *outW = g_width;
-    *outH = g_height;
+    if (!gInitialized) return false;
+    *outW = gWidth;
+    *outH = gHeight;
     return true;
 }
 
@@ -125,8 +124,8 @@ bool platformGetScaledWindowSize(int32_t *outW, int32_t *outH) {
 }
 
 void platformSetWindowSize(int32_t width, int32_t height) {
-    if (width > 0) g_width = width;
-    if (height > 0) g_height = height;
+    if (width > 0) gWidth = width;
+    if (height > 0) gHeight = height;
 }
 
 void platformSetWindowTitle(MAYBE_UNUSED const char *title) {

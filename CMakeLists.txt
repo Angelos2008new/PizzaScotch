@@ -83,9 +83,7 @@ add_compile_definitions(
 
 # Audio backend defaults
 if(AUDIO_BACKEND STREQUAL "")
-    if(PLATFORM STREQUAL "web")
-        set(AUDIO_BACKEND "web")
-    elseif(PLATFORM STREQUAL "ps3" OR PLATFORM STREQUAL "vita" OR PLATFORM STREQUAL "switch")
+    if(PLATFORM STREQUAL "ps3" OR PLATFORM STREQUAL "vita" OR PLATFORM STREQUAL "switch")
         set(AUDIO_BACKEND "openal")
     elseif(PLATFORM STREQUAL "ps2")
         set(AUDIO_BACKEND "ps2")
@@ -609,7 +607,7 @@ elseif(PLATFORM STREQUAL "web")
             "-sEXPORT_ES6=1"
             "-sENVIRONMENT=web"
             "-sWASMFS=1"
-            "-sEXPORTED_RUNTIME_METHODS=['HEAP8', 'HEAPU8', 'HEAPF32', 'ccall', 'cwrap', 'specialHTMLTargets', 'UTF8ToString']"
+            "-sEXPORTED_RUNTIME_METHODS=['callMain', 'HEAP8', 'HEAPU8', 'HEAPF32', 'ccall', 'cwrap', 'specialHTMLTargets', 'UTF8ToString']"
             "-sEXPORTED_FUNCTIONS=['_main', '_onKeyDown', '_onKeyUp']"
             "-sOFFSCREENCANVAS_SUPPORT=1"
             "-sOFFSCREEN_FRAMEBUFFER=1"
