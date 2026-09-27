@@ -7491,6 +7491,17 @@ static RValue builtin_audio_group_load(VMContext* ctx, RValue* args, MAYBE_UNUSE
     return RValue_makeUndefined();
 }
 
+static RValue builtin_audio_group_set_gain(VMContext* ctx, RValue* args, int32_t argCount) {
+    REQUIRE_ARGC_AT_LEAST("audio_group_set_gain", 3, RValue_makeUndefined());
+    AudioSystem* audio = ctx->runner->audioSystem;
+    if (audio == nullptr) return RValue_makeUndefined();
+    int32_t groupIndex = RValue_toInt32(args[0]);
+    float gain = (float) RValue_toReal(args[1]);
+    int32_t timeMs = RValue_toInt32(args[2]);
+    audio->vtable->setGroupGain(audio, groupIndex, gain, (uint32_t)(timeMs > 0 ? timeMs : 0));
+    return RValue_makeUndefined();
+}
+
 static RValue builtin_audio_group_is_loaded(VMContext* ctx, RValue* args, MAYBE_UNUSED int32_t argCount) {
     AudioSystem* audio = ctx->runner->audioSystem;
     if (audio == nullptr) return RValue_makeBool(false);
@@ -22250,6 +22261,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "audio_master_gain", builtin_audio_master_gain);
     VM_registerBuiltin(ctx, "audio_set_master_gain", builtin_audio_set_master_gain);
     VM_registerBuiltin(ctx, "audio_group_load", builtin_audio_group_load);
+    VM_registerBuiltin(ctx, "audio_group_set_gain", builtin_audio_group_set_gain);
     VM_registerBuiltin(ctx, "audio_group_is_loaded", builtin_audio_group_is_loaded);
     if (!isGMS2) {
         VM_registerBuiltin(ctx, "audio_play_music", builtin_audio_play_music);
