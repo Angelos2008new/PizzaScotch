@@ -86,9 +86,7 @@ class ButterscotchDroidRunner(
     )
 
     init {
-        this.stdioCallback = ButterscotchNative.registerStdioListener {
-            this@ButterscotchDroidRunner.logFile.appendText(it + "\n")
-        }
+        ButterscotchNative.setActiveLogFile(logFile.absolutePath)
     }
 
     /**
@@ -295,7 +293,7 @@ class ButterscotchDroidRunner(
         renderJob = null
         started = false
         runnerStarted = false
-        stdioCallback?.let { ButterscotchNative.unregisterStdioListener(it) }
+        ButterscotchNative.setActiveLogFile(null)
     }
 
     sealed interface InputEvent {
