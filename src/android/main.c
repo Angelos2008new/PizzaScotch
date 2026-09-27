@@ -85,16 +85,14 @@ void platformLog(const logType type, const char *format, va_list va) {
 
     __android_log_vprint(prio, LOG_TAG, format, va);
 
-    char* string;
-    vasprintf(&string, format, va);
+    char string[1024];
+    vsnprintf(string, sizeof(string), format, va);
 
     JNIEnv* env = getEnvNoAttach();
     if (env == nullptr || gNativeClass == nullptr) return;
     jstring jString = (*env)->NewStringUTF(env, string);
     (*env)->CallStaticVoidMethod(env, gNativeClass, gOnButterscotchLogMethod, jString);
     (*env)->DeleteLocalRef(env, jString);
-
-    free(string);
 }
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, MAYBE_UNUSED void* reserved) {
