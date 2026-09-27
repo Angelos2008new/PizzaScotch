@@ -85,8 +85,6 @@ add_compile_definitions(
 if(AUDIO_BACKEND STREQUAL "")
     if(PLATFORM STREQUAL "web")
         set(AUDIO_BACKEND "web")
-    elseif(PLATFORM STREQUAL "web-meta")
-        set(AUDIO_BACKEND "none")
     elseif(PLATFORM STREQUAL "ps3" OR PLATFORM STREQUAL "vita" OR PLATFORM STREQUAL "switch")
         set(AUDIO_BACKEND "openal")
     elseif(PLATFORM STREQUAL "ps2")
@@ -119,7 +117,7 @@ option(ENABLE_WAD14 "Enable support for WAD Version 14 and below" ON)
 option(ENABLE_WAD16 "Enable support for WAD Version 15/16" ON)
 option(ENABLE_WAD17 "Enable support for WAD Version 17" ON)
 option(ENABLE_LEGACY_GL "Enable the legacy OpenGL renderer" ON)
-if(PLATFORM STREQUAL "switch")
+if(PLATFORM STREQUAL "switch" OR PLATFORM STREQUAL "web")
     set(ENABLE_LEGACY_GL OFF CACHE BOOL "Enable the legacy OpenGL renderer" FORCE)
 endif()
 option(ENABLE_MODERN_GL "Enable the modern OpenGL renderer" ON)
@@ -156,22 +154,14 @@ if(ENABLE_NOOP_RENDERER)
     add_compile_definitions(ENABLE_NOOP_RENDERER)
 endif()
 
-if(PLATFORM STREQUAL "web-meta")
-    # Metadata-only build: just the data.win parser and its direct deps. No VM, no runner, no I/O subsystems.
-    set(SOURCES
-        src/data_win.c
-        src/binary_reader.c
-		src/log.c
-		src/stb_ds.c
-    )
-else()
-    file(GLOB SOURCES src/*.c)
-    # These platforms haven't been converted to the refactored system yet.
-    # This list should NEVER grow, all new platforms should use the new system.
-    if(PLATFORM STREQUAL "ps2" OR PLATFORM STREQUAL "ps3" OR PLATFORM STREQUAL "web" OR PLATFORM STREQUAL "android")
-        list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/loop.c")
-    endif()
+file(GLOB SOURCES src/*.c)
+
+# These platforms haven't been converted to the refactored system yet.
+# This list should NEVER grow, all new platforms should use the new system.
+if(PLATFORM STREQUAL "ps2" OR PLATFORM STREQUAL "ps3" OR PLATFORM STREQUAL "android")
+    list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/loop.c")
 endif()
+
 # Platform specific files builds
 file(GLOB PLATFORM_SOURCES src/${PLATFORM}/*.c)
 
@@ -320,12 +310,10 @@ target_include_directories(bzip2 PUBLIC vendor/bzip2)
 target_compile_options(bzip2 PRIVATE -w)
 
 # Video playback source
-if(NOT PLATFORM STREQUAL "web-meta")
-    if(BUTTERSCOTCH_FFMPEG)
-        target_sources(butterscotch PRIVATE src/video/ffmpeg/ffmpeg.c)
-    elseif(BUTTERSCOTCH_VIDEO_NULL)
-        target_sources(butterscotch PRIVATE src/video/null_video.c)
-    endif()
+if(BUTTERSCOTCH_FFMPEG)
+    target_sources(butterscotch PRIVATE src/video/ffmpeg/ffmpeg.c)
+elseif(BUTTERSCOTCH_VIDEO_NULL)
+    target_sources(butterscotch PRIVATE src/video/null_video.c)
 endif()
 
 # Spatial grid logs
@@ -619,40 +607,18 @@ elseif(PLATFORM STREQUAL "web")
             PRIVATE
             "-sMODULARIZE=1"
             "-sEXPORT_ES6=1"
-            "-sENVIRONMENT=worker"
+            "-sENVIRONMENT=web"
             "-sWASMFS=1"
             "-sEXPORTED_RUNTIME_METHODS=['HEAP8', 'HEAPU8', 'HEAPF32', 'ccall', 'cwrap', 'specialHTMLTargets', 'UTF8ToString']"
-            "-sEXPORTED_FUNCTIONS=['_main', '_mountOpfs', '_startRunner', '_stopRunner', '_malloc', '_free', '_getKeyDownPtr', '_getKeyUpPtr', '_getKeyCount', '_setAudioSampleRate', '_pullAudioFrames']"
+            "-sEXPORTED_FUNCTIONS=['_main', '_onKeyDown', '_onKeyUp']"
             "-sOFFSCREENCANVAS_SUPPORT=1"
             "-sOFFSCREEN_FRAMEBUFFER=1"
             "-sMIN_WEBGL_VERSION=2"
             "-sMAX_WEBGL_VERSION=2"
             "-sFULL_ES3=1"
             "-sALLOW_MEMORY_GROWTH"
-            "-sSHARED_MEMORY=1"
-            "-sPTHREAD_POOL_SIZE=4"
-            "-pthread"
-    )
-
-    target_compile_options(butterscotch PRIVATE "-pthread")
-elseif(PLATFORM STREQUAL "web-meta")
-    set_target_properties(butterscotch PROPERTIES
-        SUFFIX ".mjs"
-        OUTPUT_NAME "butterscotch-meta"
-    )
-
-    target_link_libraries(butterscotch PRIVATE stb_ds)
-
-    target_link_options(
-            butterscotch
-            PRIVATE
-            "-sMODULARIZE=1"
-            "-sEXPORT_ES6=1"
-            "-sENVIRONMENT=web"
-            "-sEXPORTED_RUNTIME_METHODS=['HEAPU8', 'ccall', 'cwrap', 'UTF8ToString', 'FS']"
-            "-sEXPORTED_FUNCTIONS=['_main', '_parseDataWin', '_freeDataWin', '_getGameName', '_getGameDisplayName', '_getMajorVersion', '_getMinorVersion', '_getRelease', '_getBuild', '_getDefaultWindowWidth', '_getDefaultWindowHeight', '_malloc', '_free']"
-            "-sALLOW_MEMORY_GROWTH=1"
-            "-sFORCE_FILESYSTEM=1"
+            "-sINVOKE_RUN=0"
+            "-sJSPI"
     )
 elseif(PLATFORM STREQUAL "android")
     if (NOT ENABLE_MODERN_GL)
