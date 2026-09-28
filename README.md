@@ -1,3 +1,8 @@
+<div align="center">
+<img width="256" height="256" alt="PizzaScotchLogo_256" src="https://github.com/user-attachments/assets/c2c6358c-95c9-4b86-854a-4e68aedb0d56" />
+</div>
+<h1 align="center">PizzaScotch</h1>
+
 # Attention 
 
 i am sure this project will be pain in the ass cuz i said to myself that no ai will touch ts (unless you know what are you doing and have ai then ill think about this but idk). i have no idea how i even going to get this work.
@@ -38,4 +43,4 @@ im gona just leave this here (im stealing it from some kind of website).
 
 ## Quote of the README.md update:
 
-What a shit load of fuck!
+COOCKIES!
