@@ -198,14 +198,19 @@ void *platformGetProcAddress(MAYBE_UNUSED const char *name) {
 }
 
 bool platformHandleEvents(void) {
-    while (gKeyUpCount != 0) {
-        RunnerKeyboard_onKeyUp(gRunner->keyboard, gKeyUpQueue[--gKeyUpCount]);
+    int keyUpIndex = 0;
+    while (gKeyUpCount != keyUpIndex) {
+        RunnerKeyboard_onKeyUp(gRunner->keyboard, gKeyUpQueue[keyUpIndex++]);
     }
 
-    while (gKeyDownCount != 0) {
-        RunnerKeyboard_onKeyDown(gRunner->keyboard, gKeyDownQueue[--gKeyDownCount]);
+    int keyDownIndex = 0;
+    while (gKeyDownCount != keyDownIndex) {
+        RunnerKeyboard_onKeyDown(gRunner->keyboard, gKeyDownQueue[keyDownIndex++]);
     }
 
+    gKeyUpCount = 0;
+    gKeyDownCount = 0;
+    
     return gRequestedRunnerExit;
 }
 
