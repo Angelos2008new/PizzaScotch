@@ -42,6 +42,23 @@ int mountOpfs() {
     return 0;
 }
 
+// mkdir -p for WASMFS paths
+static int mkdirP(const char* path) {
+    char buf[512];
+    size_t len = strlen(path);
+    if (len >= sizeof(buf)) return -1;
+    memcpy(buf, path, len + 1);
+    for (size_t i = 1; len > i; i++) {
+        if (buf[i] == '/') {
+            buf[i] = '\0';
+            if (mkdir(buf, 0777) != 0 && errno != EEXIST) return -1;
+            buf[i] = '/';
+        }
+    }
+    if (mkdir(buf, 0777) != 0 && errno != EEXIST) return -1;
+    return 0;
+}
+
 int startRunner(int butterscotchArgsCount, char* butterscotchArgs[]) {
     setbuf(stderr, NULL);
 
@@ -58,6 +75,10 @@ int startRunner(int butterscotchArgsCount, char* butterscotchArgs[]) {
 
     CommandLineArgs args;
     parseCommandLineArgs(&args, argc, argv);
+
+    // Make sure the saves directory exists. The FileSystem impl will write into it.
+    requireMessageFormatted(__FILE__, __LINE__, mkdirP(args.saveFolder) == 0, "Failed to ensure saves dir exists at %s: %s\n", args.saveFolder, strerror(errno));
+
     int ret = loop(args, argv[0]);
     freeCommandLineArgs(&args);
 
