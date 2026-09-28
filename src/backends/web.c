@@ -82,6 +82,11 @@ bool platformInit(int32_t reqW, int32_t reqH, MAYBE_UNUSED const char *title, MA
     attrs.minorVersion = 0;
     attrs.alpha = 0;
     attrs.antialias = 0; // Required to avoid "WebGL warning: blitFramebuffer: DRAW_FRAMEBUFFER may not have multiple samples."
+    // These two are required because, if we don't, the canvas itself handles framebuffer swapping, and we DON'T want that because sometimes we don't swap the framebuffer
+    // For example: When switching rooms, if you DIDN'T have these, it would cause a brief flicker of the content of the room
+    // Essentially what it does is that it creates a framebuffer on the canvas and blits the result manually to the WebGL canvas, mimicking how desktop OpenGL works
+    attrs.explicitSwapControl = 1;
+    attrs.renderViaOffscreenBackBuffer = 1;
 
     // Yes, "#canvas" feels nasty as HELL
     // But that's how Emscripten works for SOME REASON

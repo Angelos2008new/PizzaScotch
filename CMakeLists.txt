@@ -586,6 +586,8 @@ if(PLATFORM STREQUAL "cli" OR PLATFORM STREQUAL "vita" OR PLATFORM STREQUAL "swi
                 "-sSTACK_SIZE=1MB"
                 # We need this if we want to access "FS" from JavaScript (Module.FS.writeFile)
                 "-sFORCE_FILESYSTEM=1"
+                # "explicitSwapControl" and "renderViaOffscreenBackBuffer", see the web.c file
+                "-sOFFSCREEN_FRAMEBUFFER=1"
         )
     endif()
     if(BACKEND STREQUAL "appkit")
