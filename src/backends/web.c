@@ -127,6 +127,8 @@ bool platformInit(int32_t reqW, int32_t reqH, MAYBE_UNUSED const char *title, MA
     gInitialized = true;
     gWebGLContextHandle = ctx;
 
+    emscripten_set_canvas_element_size("#canvas", gWidth, gHeight);
+
     return true;
 }
 
@@ -170,6 +172,9 @@ bool platformGetScaledWindowSize(int32_t *outW, int32_t *outH) {
 void platformSetWindowSize(int32_t width, int32_t height) {
     if (width > 0) gWidth = width;
     if (height > 0) gHeight = height;
+
+    if (gInitialized)
+        emscripten_set_canvas_element_size("#canvas", gWidth, gHeight);
 }
 
 void platformSetWindowTitle(MAYBE_UNUSED const char *title) {
