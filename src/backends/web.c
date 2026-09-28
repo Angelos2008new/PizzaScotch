@@ -11,10 +11,20 @@
 
 #define MAX_KEY_QUEUE 64
 
-static int gKeyUpQueue[MAX_KEY_QUEUE];
-static int gKeyDownQueue[MAX_KEY_QUEUE];
-static int gKeyUpCount;
-static int gKeyDownCount;
+enum {
+    INPUTTYPE_KEY,
+    INPUTTYPE_MOUSE_BUTTON
+} typedef InputType;
+
+struct {
+    InputType inputType;
+    int key;
+    bool down;
+} typedef InputEntry;
+
+static InputEntry gInputQueue[MAX_KEY_QUEUE];
+static int gInputCount;
+
 
 static Runner* gRunner = nullptr;
 static EMSCRIPTEN_WEBGL_CONTEXT_HANDLE gWebGLContextHandle = -1;
@@ -22,6 +32,8 @@ static int32_t gWidth = 0;
 static int32_t gHeight = 0;
 static bool gInitialized = false;
 static bool gRequestedRunnerExit = false;
+static double gMouseX = 0.0;
+static double gMouseY = 0.0;
 
 // Mounts the browser's OPFS at "/butterscotch" in the WASMFS virtual filesystem.
 int mountOpfs() {
@@ -133,17 +145,48 @@ bool platformInit(int32_t reqW, int32_t reqH, MAYBE_UNUSED const char *title, MA
 }
 
 void onKeyUp(int keyCode) {
-    if (gKeyUpCount == MAX_KEY_QUEUE)
+    if (gInputCount == MAX_KEY_QUEUE)
         return;
 
-    gKeyUpQueue[gKeyUpCount++] = keyCode;
+    int entryIndex = gInputCount++;
+    gInputQueue[entryIndex].inputType = INPUTTYPE_KEY;
+    gInputQueue[entryIndex].key = keyCode;
+    gInputQueue[entryIndex].down = false;
 }
 
 void onKeyDown(int keyCode) {
-    if (gKeyDownCount == MAX_KEY_QUEUE)
+    if (gInputCount == MAX_KEY_QUEUE)
         return;
 
-    gKeyDownQueue[gKeyDownCount++] = keyCode;
+    int entryIndex = gInputCount++;
+    gInputQueue[entryIndex].inputType = INPUTTYPE_KEY;
+    gInputQueue[entryIndex].key = keyCode;
+    gInputQueue[entryIndex].down = true;
+}
+
+void onMouseUp(int button) {
+    if (gInputCount == MAX_KEY_QUEUE)
+        return;
+
+    int entryIndex = gInputCount++;
+    gInputQueue[entryIndex].inputType = INPUTTYPE_MOUSE_BUTTON;
+    gInputQueue[entryIndex].key = button;
+    gInputQueue[entryIndex].down = false;
+}
+
+void onMouseDown(int button) {
+    if (gInputCount == MAX_KEY_QUEUE)
+        return;
+
+    int entryIndex = gInputCount++;
+    gInputQueue[entryIndex].inputType = INPUTTYPE_MOUSE_BUTTON;
+    gInputQueue[entryIndex].key = button;
+    gInputQueue[entryIndex].down = true;
+}
+
+void onMouseMove(double x, double y) {
+    gMouseX = x;
+    gMouseY = y;
 }
 
 void platformExit(void) {
@@ -183,10 +226,10 @@ void platformSetWindowTitle(MAYBE_UNUSED const char *title) {
 
 void platformGetMousePos(double *xPos, double *yPos) {
     if (xPos)
-        *xPos = 0.0;
+        *xPos = gMouseX;
 
     if (yPos)
-        *yPos = 0.0;
+        *yPos = gMouseY;
 }
 
 void platformSwapBuffers(void) {
@@ -198,18 +241,33 @@ void *platformGetProcAddress(MAYBE_UNUSED const char *name) {
 }
 
 bool platformHandleEvents(void) {
-    int keyUpIndex = 0;
-    while (gKeyUpCount != keyUpIndex) {
-        RunnerKeyboard_onKeyUp(gRunner->keyboard, gKeyUpQueue[keyUpIndex++]);
+    int inputIndex = 0;
+    while (gInputCount != inputIndex) {
+        InputEntry entry = gInputQueue[inputIndex];
+
+        switch (entry.inputType) {
+            case INPUTTYPE_KEY: {
+                if (entry.down) {
+                    RunnerKeyboard_onKeyDown(gRunner->keyboard, entry.key);
+                } else {
+                    RunnerKeyboard_onKeyUp(gRunner->keyboard, entry.key);
+                }
+                break;
+            }
+            case INPUTTYPE_MOUSE_BUTTON: {
+                if (entry.down) {
+                    RunnerMouse_onButtonDown(gRunner->mouse, entry.key);
+                } else {
+                    RunnerMouse_onButtonUp(gRunner->mouse, entry.key);
+                }
+                break;
+            }
+        }
+
+        inputIndex++;
     }
 
-    int keyDownIndex = 0;
-    while (gKeyDownCount != keyDownIndex) {
-        RunnerKeyboard_onKeyDown(gRunner->keyboard, gKeyDownQueue[keyDownIndex++]);
-    }
-
-    gKeyUpCount = 0;
-    gKeyDownCount = 0;
+    gInputCount = 0;
     
     return gRequestedRunnerExit;
 }
