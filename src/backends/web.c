@@ -9,8 +9,24 @@
 #include <emscripten/wasmfs.h>
 #include <GL/gl.h>
 
+#define MAX_KEY_QUEUE 64
+
+static int gKeyUpQueue[MAX_KEY_QUEUE];
+static int gKeyDownQueue[MAX_KEY_QUEUE];
+static int gKeyUpCount;
+static int gKeyDownCount;
+
+static Runner* gRunner = nullptr;
+static EMSCRIPTEN_WEBGL_CONTEXT_HANDLE gWebGLContextHandle = -1;
+static int32_t gWidth = 0;
+static int32_t gHeight = 0;
+static bool gInitialized = false;
+static bool gRequestedRunnerExit = false;
+
 // Mounts the browser's OPFS at "/butterscotch" in the WASMFS virtual filesystem.
 int mountOpfs() {
+    logInfo("Trying to mount OPFS in WASMFS...\n");
+
     backend_t opfs = wasmfs_create_opfs_backend();
     if (!opfs) {
         logWarn("Failed to create OPFS backend\n");
@@ -21,36 +37,42 @@ int mountOpfs() {
         logWarn("Failed to mount OPFS at /butterscotch: %s\n", strerror(errno));
         return -1;
     }
+
+    logInfo("Successfully mounted OPFS in WASMFS!\n");
     return 0;
 }
 
-int main(MAYBE_UNUSED int argc, char *argv[]) {
+int startRunner(int butterscotchArgsCount, char* butterscotchArgs[]) {
     setbuf(stderr, NULL);
 
-    mountOpfs();
-    
+    int argc = butterscotchArgsCount + 1;
+    char** argv;
+
+    argv = safeCalloc(argc, sizeof(char*));
+
+    repeat(argc, i) {
+        argv[i] = i == 0 ? "butterscotch.wasm" : butterscotchArgs[i - 1];
+    }
+
+    gRequestedRunnerExit = false;
+
     CommandLineArgs args;
     parseCommandLineArgs(&args, argc, argv);
     int ret = loop(args, argv[0]);
     freeCommandLineArgs(&args);
+
+    free(argv);
+
     return ret;
+}
+
+void requestRunnerExit() {
+    gRequestedRunnerExit = true;
 }
 
 void platformLog(MAYBE_UNUSED const logType type, const char *format, va_list va) {
     vfprintf(stdout, format, va);
 }
-
-#define MAX_KEY_QUEUE 64
-
-static int gKeyUpQueue[MAX_KEY_QUEUE];
-static int gKeyDownQueue[MAX_KEY_QUEUE];
-static int gKeyUpCount;
-static int gKeyDownCount;
-
-static Runner* gRunner = NULL;
-static int32_t gWidth = 0;
-static int32_t gHeight = 0;
-static bool gInitialized = false;
 
 bool platformInit(int32_t reqW, int32_t reqH, MAYBE_UNUSED const char *title, MAYBE_UNUSED bool headless) {
     EmscriptenWebGLContextAttributes attrs;
@@ -60,9 +82,6 @@ bool platformInit(int32_t reqW, int32_t reqH, MAYBE_UNUSED const char *title, MA
     attrs.minorVersion = 0;
     attrs.alpha = 0;
     attrs.antialias = 0; // Required to avoid "WebGL warning: blitFramebuffer: DRAW_FRAMEBUFFER may not have multiple samples."
-    // Both of these are required to allow us to use emscripten_webgl_commit_frame
-    attrs.explicitSwapControl = true;
-    attrs.renderViaOffscreenBackBuffer = true;
 
     // Yes, "#canvas" feels nasty as HELL
     // But that's how Emscripten works for SOME REASON
@@ -80,6 +99,7 @@ bool platformInit(int32_t reqW, int32_t reqH, MAYBE_UNUSED const char *title, MA
     gWidth = reqW > 0 ? reqW : 640;
     gHeight = reqH > 0 ? reqH : 480;
     gInitialized = true;
+    gWebGLContextHandle = ctx;
 
     return true;
 }
@@ -100,6 +120,7 @@ void onKeyDown(int keyCode) {
 
 void platformExit(void) {
     gInitialized = false;
+    emscripten_webgl_destroy_context(gWebGLContextHandle);
 }
 
 void platformInitFunctions(Runner *runner) {
@@ -126,6 +147,7 @@ void platformSetWindowSize(int32_t width, int32_t height) {
 }
 
 void platformSetWindowTitle(MAYBE_UNUSED const char *title) {
+    MAIN_THREAD_EM_ASM({ postMessage({ type: 'windowTitle', title: UTF8ToString($0) }); }, title);
 }
 
 void platformGetMousePos(double *xPos, double *yPos) {
@@ -153,10 +175,54 @@ bool platformHandleEvents(void) {
         RunnerKeyboard_onKeyDown(gRunner->keyboard, gKeyDownQueue[--gKeyDownCount]);
     }
 
-    return false;
+    return gRequestedRunnerExit;
 }
 
 void platformSleepUntil(uint64_t time) {
     int64_t remaining = (int64_t) time - (int64_t) nowNanos();
     emscripten_sleep(remaining > 0 ? (unsigned int) (remaining / 1000000) : 0);
+}
+
+// ===[ METADATA THINGS ]===
+DataWin* parseDataWin(const char* path) {
+    DataWinParserOptions opts = {0};
+    opts.parseGen8 = true;
+    opts.parseStrg = true; // GEN8 stores string offsets that point into STRG
+    return DataWin_parse(path, opts);
+}
+
+void freeDataWin(DataWin* dw) {
+    if (dw != nullptr) DataWin_free(dw);
+}
+
+const char* getGameName(DataWin* dw) {
+    return (dw != nullptr) ? dw->gen8.name : nullptr;
+}
+
+const char* getGameDisplayName(DataWin* dw) {
+    return (dw != nullptr) ? dw->gen8.displayName : nullptr;
+}
+
+uint32_t getMajorVersion(DataWin* dw) {
+    return (dw != nullptr) ? dw->gen8.major : 0;
+}
+
+uint32_t getMinorVersion(DataWin* dw) {
+    return (dw != nullptr) ? dw->gen8.minor : 0;
+}
+
+uint32_t getRelease(DataWin* dw) {
+    return (dw != nullptr) ? dw->gen8.release : 0;
+}
+
+uint32_t getBuild(DataWin* dw) {
+    return (dw != nullptr) ? dw->gen8.build : 0;
+}
+
+uint32_t getDefaultWindowWidth(DataWin* dw) {
+    return (dw != nullptr) ? dw->gen8.defaultWindowWidth : 0;
+}
+
+uint32_t getDefaultWindowHeight(DataWin* dw) {
+    return (dw != nullptr) ? dw->gen8.defaultWindowHeight : 0;
 }

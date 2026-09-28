@@ -182,6 +182,8 @@ void parseCommandLineArgs(CommandLineArgs* args, int argc, char* argv[]) {
     args->renderer = NOOP;
 #endif
 
+    // We need this if we run the parseCommandLineArgs on the same process twice
+    optind = 0;
     int opt;
     while ((opt = getopt_long(argc, argv, "", longOptions, nullptr)) != -1) {
         switch (opt) {

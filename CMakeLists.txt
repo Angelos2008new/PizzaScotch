@@ -570,21 +570,22 @@ if(PLATFORM STREQUAL "cli" OR PLATFORM STREQUAL "vita" OR PLATFORM STREQUAL "swi
                 "-sEXPORT_ES6=1"
                 "-sENVIRONMENT=web"
                 "-sWASMFS=1"
-                "-sEXPORTED_RUNTIME_METHODS=['callMain', 'HEAP8', 'HEAPU8', 'HEAPF32', 'ccall', 'cwrap', 'specialHTMLTargets', 'UTF8ToString']"
-                "-sEXPORTED_FUNCTIONS=['_main', '_onKeyDown', '_onKeyUp']"
-                "-sOFFSCREENCANVAS_SUPPORT=1"
-                "-sOFFSCREEN_FRAMEBUFFER=1"
+                "-sEXPORTED_RUNTIME_METHODS=['HEAP8', 'HEAPU8', 'HEAPF32', 'ccall', 'cwrap', 'specialHTMLTargets', 'UTF8ToString', 'stringToNewUTF8', 'setValue', 'FS']"
+                "-sEXPORTED_FUNCTIONS=['_malloc', '_free', '_startRunner', '_mountOpfs', '_parseDataWin', '_getGameName', '_getGameDisplayName', '_freeDataWin', '_onKeyDown', '_onKeyUp', '_requestRunnerExit']"
                 "-sMIN_WEBGL_VERSION=2"
                 "-sMAX_WEBGL_VERSION=2"
                 "-sFULL_ES3=1"
                 "-sALLOW_MEMORY_GROWTH"
                 "-sINVOKE_RUN=0"
                 "-sJSPI"
+                "-sJSPI_EXPORTS=['startRunner', 'parseDataWin', 'mountOpfs']"
                 # Useful to know when a stack overflow (that is, the WASM stack) happens
                 "-sSTACK_OVERFLOW_CHECK=2"
                 # Increases the stack size, needed because for some reason MiniAudio causes a stack overflow in DELTARUNE
                 # "Aborted(stack overflow (Attempt to set SP to 0xfffff640, with stack limits [0x00000000 - 0x00010000]). If you require more stack space build with -sSTACK_SIZE=<bytes>)"
                 "-sSTACK_SIZE=1MB"
+                # We need this if we want to access "FS" from JavaScript (Module.FS.writeFile)
+                "-sFORCE_FILESYSTEM=1"
         )
     endif()
     if(BACKEND STREQUAL "appkit")
