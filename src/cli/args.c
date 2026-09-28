@@ -1,5 +1,10 @@
 #include <loop.h>
 #include <getopt.h>
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 bool parseOsTypeArg(const char* s, YoYoOperatingSystem* out) {
     forEach(const OsTypeNameEntry, entry, OS_TYPE_NAMES, OS_TYPE_NAMES_COUNT) {

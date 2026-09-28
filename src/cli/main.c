@@ -1,11 +1,6 @@
 #include "args.h"
 #include <loop.h>
 #include <getopt.h>
-#ifdef _WIN32
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
 
 /* For SDL_main */
 #if defined(USE_SDL1)
