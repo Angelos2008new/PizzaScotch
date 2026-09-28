@@ -1,6 +1,8 @@
 #include "gl_renderer.h"
 #include "matrix_math.h"
 #include "text_utils.h"
+#include "runner.h"
+#include "file_system.h"
 
 #if defined(__EMSCRIPTEN__) || defined(__ANDROID__) || defined(__SWITCH__)
 #include <GLES3/gl3.h>
@@ -720,6 +722,7 @@ static void glInit(Renderer* renderer, DataWin* dataWin) {
     // Create VAO/VBO/EBO
     if (hasVAO()) {
         glGenVertexArrays(1, &modernGl->vao);
+        glGenVertexArrays(1, &modernGl->vertexBufferVao);
         glBindVertexArray(modernGl->vao);
     }
     glGenBuffers(1, &modernGl->vbo);
@@ -878,7 +881,10 @@ static void glDestroy(Renderer* renderer) {
     free(modernGl->gmlShaders);
     freeShader(modernGl->defaultShaderProgram);
     free(modernGl->defaultShaderProgram);
-    if (hasVAO()) glDeleteVertexArrays(1, &modernGl->vao);
+    if (hasVAO()) {
+        glDeleteVertexArrays(1, &modernGl->vao);
+        glDeleteVertexArrays(1, &modernGl->vertexBufferVao);
+    }
     glDeleteBuffers(1, &modernGl->vbo);
     glDeleteBuffers(1, &modernGl->ebo);
 
@@ -1026,6 +1032,7 @@ bool GLRenderer_ensureTextureLoaded(GLRenderer* gl, uint32_t pageId) {
             logError("GL: Failed to load Vita TXTR page %u", pageId);
             return false;
         }
+        GLCommon_applyTexFilter(gl->base.texFilter);
         logInfo("GL: Loaded TXTR page %u (%dx%d)\n", pageId, gl->textureWidths[pageId], gl->textureHeights[pageId]);
         return true;
     }
@@ -1038,7 +1045,14 @@ bool GLRenderer_ensureTextureLoaded(GLRenderer* gl, uint32_t pageId) {
 
     int w, h;
     bool gm2022_5 = DataWin_isVersionAtLeast(dw, 2022, 5, 0, 0);
-    uint8_t* pixels = ImageDecoder_decodeToRgba(txtr->blobData, (size_t) txtr->blobSize, gm2022_5, &w, &h);
+    uint8_t* externalData = nullptr;
+    int32_t externalSize = 0;
+    if (txtr->externalPath != nullptr && gl->base.runner != nullptr)
+        gl->base.runner->fileSystem->vtable->readFileBinary(gl->base.runner->fileSystem,
+            txtr->externalPath, &externalData, &externalSize);
+    uint8_t* pixels = ImageDecoder_decodeToRgba(externalData ? externalData : txtr->blobData,
+        externalData ? (size_t)externalSize : (size_t)txtr->blobSize, gm2022_5, &w, &h);
+    free(externalData);
     if (pixels == nullptr) {
         logWarn("GL: Failed to decode TXTR page %u\n", pageId);
         return false;
@@ -1061,8 +1075,7 @@ bool GLRenderer_ensureTextureLoaded(GLRenderer* gl, uint32_t pageId) {
     bool isPOT = (w & (w - 1)) == 0 && (h & (h - 1)) == 0;
     GLint wrapMode = isPOT ? GL_REPEAT : GL_CLAMP_TO_EDGE;
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    GLCommon_applyTexFilter(gl->base.texFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapMode);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapMode);
 
@@ -1800,6 +1813,7 @@ static void glDrawVertexBuffer(MAYBE_UNUSED Renderer* renderer, VertexBuffer* bu
         return;
 
     GLRenderer* gl = (GLRenderer*) renderer;
+    GLModernRenderer* modernGl = (GLModernRenderer*) gl;
     flushBatch(gl);
 
     typedef struct {
@@ -1816,8 +1830,13 @@ static void glDrawVertexBuffer(MAYBE_UNUSED Renderer* renderer, VertexBuffer* bu
 
     GLenum mode = primitiveTypeToGL(primitive);
 
+    if (hasVAO()) {
+        glBindVertexArray(modernGl->vertexBufferVao);
+    }
     glBindBuffer(GL_ARRAY_BUFFER, glBuffer->vbo);
     glBufferData(GL_ARRAY_BUFFER, buffer->size, buffer->data, GL_DYNAMIC_DRAW);
+
+    for (int i = 0; i < 4; i++) glDisableVertexAttribArray(i);
 
     bool hasColor = false;
     bool hasTexcoord = false;
@@ -1913,10 +1932,8 @@ static void glDrawVertexBuffer(MAYBE_UNUSED Renderer* renderer, VertexBuffer* bu
 
     int vertexCount = buffer->size / buffer->format->stride;
     if (vertexCount <= 0) {
-        for (int i = 0; i < buffer->format->numElements; i++) {
-            glDisableVertexAttribArray(i);
-        }
-
+        if (hasVAO()) glBindVertexArray(modernGl->vao);
+        else for (int i = 0; i < 4; i++) glDisableVertexAttribArray(i);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         return;
     }
@@ -1934,10 +1951,8 @@ static void glDrawVertexBuffer(MAYBE_UNUSED Renderer* renderer, VertexBuffer* bu
     }
 
     if (number <= 0) {
-        for (int i = 0; i < buffer->format->numElements; i++) {
-            glDisableVertexAttribArray(i);
-        }
-
+        if (hasVAO()) glBindVertexArray(modernGl->vao);
+        else for (int i = 0; i < 4; i++) glDisableVertexAttribArray(i);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         return;
     }
@@ -1948,10 +1963,8 @@ static void glDrawVertexBuffer(MAYBE_UNUSED Renderer* renderer, VertexBuffer* bu
         number
     );
 
-    for (int i = 0; i < buffer->format->numElements; i++) {
-        glDisableVertexAttribArray(i);
-    }
-
+    if (hasVAO()) glBindVertexArray(modernGl->vao);
+    else for (int i = 0; i < 4; i++) glDisableVertexAttribArray(i);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
@@ -2347,8 +2360,7 @@ static int32_t glCreateSurface(Renderer* renderer, int32_t width, int32_t height
     bool isPOT = (width & (width - 1)) == 0 && (height & (height - 1)) == 0;
     GLint wrapMode = isPOT ? GL_REPEAT : GL_CLAMP_TO_EDGE;
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    GLCommon_applyTexFilter(renderer->texFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapMode);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapMode);
 
@@ -2739,8 +2751,7 @@ static int32_t glCreateSpriteFromSurface(Renderer* renderer, int32_t surfaceID, 
     glGenTextures(1, &newTexId);
     glBindTexture(GL_TEXTURE_2D, newTexId);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    GLCommon_applyTexFilter(renderer->texFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
@@ -2879,6 +2890,12 @@ static void glGpuSetBlendEnable(Renderer* renderer, bool enable) {
     flushBatch(gl);
     enable ? glEnable(GL_BLEND) : glDisable(GL_BLEND);
     gl->blendEnable = enable;
+}
+
+static void glGpuSetTexFilter(Renderer* renderer, bool enable) {
+    if (renderer->texFilter == enable) return;
+    flushBatch((GLRenderer*) renderer);
+    GLCommon_setTexFilter(renderer, enable);
 }
 
 static bool glGpuGetBlendEnable(Renderer* renderer) {
@@ -3262,6 +3279,7 @@ Renderer* GLRenderer_create(void) {
     glVtable.gpuSetBlendMode = glGpuSetBlendMode;
     glVtable.gpuSetBlendModeExt = glGpuSetBlendModeExt;
     glVtable.gpuSetBlendEnable = glGpuSetBlendEnable;
+    glVtable.gpuSetTexFilter = glGpuSetTexFilter;
     glVtable.gpuSetAlphaTestEnable = glGpuSetAlphaTestEnable;
     glVtable.gpuGetAlphaTestEnable = glGpuGetAlphaTestEnable;
     glVtable.gpuSetAlphaTestRef = glGpuSetAlphaTestRef;
@@ -3277,6 +3295,8 @@ Renderer* GLRenderer_create(void) {
     glVtable.ensureApplicationSurface = glEnsureApplicationSurface;
     glVtable.surfaceCopy = glSurfaceCopy;
     glVtable.surfaceGetPixels = glSurfaceGetPixels;
+    glVtable.surfaceSetPixels = GLCommon_surfaceSetPixels;
+    glVtable.surfaceUploadPixels = GLCommon_surfaceUploadPixels;
     glVtable.getSurfaceWidth = glGetSurfaceWidth;
     glVtable.getSurfaceHeight = glGetSurfaceHeight;
     glVtable.drawSurface = glDrawSurface;

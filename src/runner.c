@@ -6,6 +6,7 @@
 #include "utils.h"
 #include "json_writer.h"
 #include "collision.h"
+#include "video.h"
 
 #include <stdint.h>
 #include "stdio_compat.h"
@@ -1078,11 +1079,7 @@ void Runner_draw(Runner* runner) {
 
             // Everything after this point is static/parsed layers from the Room itself
             RoomLayer* parsedLayer = Runner_findRoomLayerById(runner->currentRoom, (int32_t) runtimeLayer->id);
-            if (parsedLayer == nullptr) {
-                Runner_popLayerShader(runner, previousShader);
-                continue;
-            }
-            if (parsedLayer->type == RoomLayerType_Assets) {
+            if (parsedLayer != nullptr && parsedLayer->type == RoomLayerType_Assets) {
                 RoomLayerAssetsData* data = parsedLayer->assetsData;
                 size_t tileElementCount = arrlenu(runtimeLayer->elements);
                 repeat(data->legacyTileCount, j) {
@@ -1139,33 +1136,31 @@ void Runner_draw(Runner* runner) {
                     }
                 }
 
-                // Sprite elements are rendered from the runtime element list (not the parsed data) so that layer_sprite_destroy can remove them at runtime.
-                size_t elementCount = arrlenu(runtimeLayer->elements);
-                {
-                repeat(elementCount, j) {
-                    if (runner->renderer == nullptr) break;
+            } else if (parsedLayer != nullptr && parsedLayer->type == RoomLayerType_Tiles) {
+                if (runner->renderer != nullptr)
+                    Runner_drawTileLayer(runner, parsedLayer->tilesData, layerOffsetX, layerOffsetY);
+            } else if (parsedLayer != nullptr && parsedLayer->type == RoomLayerType_Background) {
+                // Nothing to render here: handled above
+            } else if (parsedLayer != nullptr && parsedLayer->type == RoomLayerType_Instances) {
+                // Nothing to render here: handled above on the DRAWABLE_INSTANCE path
+            } else if (parsedLayer != nullptr && (parsedLayer->type == RoomLayerType_Path || parsedLayer->type == RoomLayerType_Path2)) {
+                // Nothing to render: not used for rendering purposes
+            } else if (parsedLayer != nullptr && parsedLayer->type == RoomLayerType_Effect) {
+                // TODO: Implement post-processing effect layers!
+            }
+
+            // Sprite elements can be moved from parsed layers to dynamic layers at runtime.
+            if (runner->renderer != nullptr) {
+                repeat(arrlenu(runtimeLayer->elements), j) {
                     RuntimeLayerElement* el = &runtimeLayer->elements[j];
-                    if (el->type != RuntimeLayerElementType_Sprite || el->spriteElement == nullptr) continue;
+                    if (!el->visible || el->type != RuntimeLayerElementType_Sprite || el->spriteElement == nullptr) continue;
                     RuntimeSpriteElement* spr = el->spriteElement;
                     if (0 > spr->spriteIndex) continue;
                     Renderer_drawSpriteExt(
                         runner->renderer, spr->spriteIndex, (int32_t) spr->frameIndex,
                         (float) spr->x + layerOffsetX, (float) spr->y + layerOffsetY, spr->scaleX,
-                        spr->scaleY, spr->rotation, el->blend,
-                        el->alpha);
+                        spr->scaleY, spr->rotation, el->blend, el->alpha);
                 }
-                }
-            } else if (parsedLayer->type == RoomLayerType_Tiles) {
-                if (runner->renderer == nullptr) continue;
-                Runner_drawTileLayer(runner, parsedLayer->tilesData, layerOffsetX, layerOffsetY);
-            } else if (parsedLayer->type == RoomLayerType_Background) {
-                // Nothing to render here: handled above
-            } else if (parsedLayer->type == RoomLayerType_Instances) {
-                // Nothing to render here: handled above on the DRAWABLE_INSTANCE path
-            } else if (parsedLayer->type == RoomLayerType_Path || parsedLayer->type == RoomLayerType_Path2) {
-                // Nothing to render: not used for rendering purposes
-            } else if (parsedLayer->type == RoomLayerType_Effect) {
-                // TODO: Implement post-processing effect layers!
             }
             ctx->currentInstance = ctx->globalScopeInstance;
             ctx->currentEventType = EVENT_DRAW;
@@ -1971,6 +1966,13 @@ static void cleanupState(Runner* runner) {
     runner->savedRoomStates = nullptr;
 
     Particles_freeAll(runner);
+    {
+    repeat(arrlen(runner->audioEmitters), i) {
+        arrfree(runner->audioEmitters[i].voices);
+    }
+    }
+    arrfree(runner->audioEmitters);
+    runner->audioEmitters = nullptr;
 
     // Drain ds_map/ds_list pools BEFORE bulk-freeing struct instances. Their RValue entries may hold RVALUE_STRUCT refs to structs in runner->structInstances, and RValue_free would deref freed memory if the structs are gone.
     {
@@ -2207,6 +2209,7 @@ void Runner_reset(Runner* runner) {
     runner->mpPotStep = 10.0;
     runner->mpPotAhead = 3.0;
     runner->mpPotOnSpot = true;
+    runner->dateTimeLocal = true;
     runner->lastMusicInstance = -1;
 
     arrsetlen(runner->cachedDrawables, 0);
@@ -2352,6 +2355,7 @@ static void validateRendererVtable(Renderer* renderer) {
     requireNotNullFunction(gpuSetBlendMode);
     requireNotNullFunction(gpuSetBlendModeExt);
     requireNotNullFunction(gpuSetBlendEnable);
+    requireNotNullFunction(gpuSetTexFilter);
     requireNotNullFunction(gpuGetBlendEnable);
     requireNotNullFunction(gpuSetAlphaTestEnable);
     requireNotNullFunction(gpuSetAlphaTestRef);
@@ -2542,6 +2546,7 @@ Runner* Runner_create(DataWin* dataWin, VMContext* vm, Renderer* renderer, FileS
     // Link runner to VM context
     vm->runner = (struct Runner*) runner;
 
+    renderer->texFilter = (dataWin->optn.info & 0x2) != 0;
     renderer->vtable->init(renderer, dataWin);
     audioSystem->vtable->init(audioSystem, dataWin, fileSystem);
 
@@ -2615,37 +2620,17 @@ void Runner_setGameArgs(Runner* runner, char** argv, int32_t argc) {
     {repeat(argc, i) arrput(runner->gameArgs, safeStrdup(argv[i]));}
 }
 
-static void Runner_clearStaleInstanceReferencesToInstance(Runner* runner, Instance* destroyedInst) {
-    if (runner == nullptr || destroyedInst == nullptr) return;
-
-    // A destroyed instance can still be referenced by another instance's per-instance state
-    // as an integer id (e.g. linked-list pointers, owner ids, chain heads, etc.). Rewrite any
-    // stale id equal to the dying instance back to -4.
-
-    // This is probably not very optimal as it loops through every single instance and every single
-    // selfVar slot, but it doesn't happen too often so maybe it should be okay?
-    // Another option would be to keep a reverse lookup table of instance ids to instances that reference them,
-    // but that would be more memory and complexity overhead.
-
-    int32_t destroyedInstanceId = destroyedInst->instanceId;
-    int32_t count = (int32_t) arrlen(runner->instances);
-    for (int32_t i = 0; i < count; i++) {
+static void clearDestroyedInstanceReferences(Runner* runner, Instance* destroyedInst) {
+    repeat(arrlen(runner->instances), i) {
         Instance* inst = runner->instances[i];
-        if (inst == nullptr || !inst->active || inst->destroyed || inst->objectIndex < 0) continue;
+        if (inst == nullptr || !inst->active || inst->destroyed) continue;
         repeat(inst->selfVars.capacity, slotIndex) {
             IntRValueEntry* entry = &inst->selfVars.entries[slotIndex];
             if (entry->key == INT_RVALUE_HASHMAP_EMPTY_KEY) continue;
-
-            uint8_t vtype = entry->value.type;
-            if (
-                (vtype == RVALUE_INT32 && entry->value.int32 == destroyedInstanceId) ||
-#ifndef NO_RVALUE_INT64
-                (vtype == RVALUE_INT64 && entry->value.int64 == destroyedInstanceId) ||
-#endif
-                (vtype == RVALUE_REAL && entry->value.real == (GMLReal) destroyedInstanceId)
-            ) {
-                entry->value = RValue_makeInt32(INSTANCE_NOONE);
-            }
+            RValue* value = &entry->value;
+            if (value->type == RVALUE_INT32 && value->assetRefType == ASSET_TYPE_INSTANCE &&
+                (uint32_t)value->int32 == destroyedInst->instanceId)
+                *value = RValue_makeInt32(INSTANCE_NOONE);
         }
     }
 }
@@ -2662,9 +2647,7 @@ void Runner_destroyInstance(MAYBE_UNUSED Runner* runner, Instance* inst, bool ru
     // If a destroyed instance is active, then well, something went VERY wrong
     inst->active = false;
 
-    // Any selfVars that still hold the destroyed instance's id must be invalidated back to
-    // noone (-4) before the instance is fully reclaimed.
-    Runner_clearStaleInstanceReferencesToInstance(runner, inst);
+    clearDestroyedInstanceReferences(runner, inst);
 
 #ifdef ENABLE_VM_TRACING
     GameObject* gameObject = &runner->dataWin->objt.objects[inst->objectIndex];
@@ -4021,6 +4004,29 @@ void Runner_step(Runner* runner) {
         RuntimeLayer* rl = &runner->runtimeLayers[i];
         rl->xOffset += rl->hSpeed;
         rl->yOffset += rl->vSpeed;
+
+        repeat(arrlenu(rl->elements), j) {
+            RuntimeLayerElement* element = &rl->elements[j];
+            if (element->type != RuntimeLayerElementType_Sprite || element->spriteElement == nullptr) continue;
+            RuntimeSpriteElement* layerSprite = element->spriteElement;
+            if (layerSprite->spriteIndex < 0 || (uint32_t)layerSprite->spriteIndex >= runner->dataWin->sprt.count) continue;
+            Sprite* sprite = &runner->dataWin->sprt.sprites[layerSprite->spriteIndex];
+            if (sprite->textureCount == 0) continue;
+
+            float advance = layerSprite->animationSpeed;
+            if (sprite->specialType) {
+                advance *= sprite->gms2PlaybackSpeed;
+                if (sprite->gms2PlaybackSpeedType == 0) {
+                    uint32_t fps = runner->currentRoom->speed;
+                    advance /= fps > 0 ? (float)fps : 60.0f;
+                }
+            }
+            layerSprite->frameIndex += advance;
+            if (layerSprite->frameIndex >= sprite->textureCount || layerSprite->frameIndex < 0.0f) {
+                layerSprite->frameIndex = fmodf(layerSprite->frameIndex, (float)sprite->textureCount);
+                if (layerSprite->frameIndex < 0.0f) layerSprite->frameIndex += sprite->textureCount;
+            }
+        }
     }
     }
 
@@ -4283,6 +4289,8 @@ void Runner_step(Runner* runner) {
         }
         arrfree(pending);
     }
+
+    Video_executePendingAsyncEvents(runner);
 
     // Dispatch collision events
     dispatchCollisionEvents(runner);

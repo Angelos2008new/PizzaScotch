@@ -89,6 +89,7 @@ void GLCommon_init(Renderer* renderer) {
     // Enable blending
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    gl->blendEnable = true;
 
     // Save original counts so we know which slots are from data.win vs dynamic
     gl->originalTexturePageCount = gl->textureCount;
@@ -133,6 +134,35 @@ void GLCommon_destroy(Renderer* renderer) {
 #endif
 
     free(gl);
+}
+
+void GLCommon_applyTexFilter(bool enable) {
+    GLint filter = enable ? GL_LINEAR : GL_NEAREST;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+}
+
+void GLCommon_setTexFilter(Renderer* renderer, bool enable) {
+    if (renderer->texFilter == enable) return;
+    GLRenderer* gl = (GLRenderer*) renderer;
+    renderer->texFilter = enable;
+
+    GLint previousBinding;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousBinding);
+    for (uint32_t i = 0; i < gl->textureCount; i++) {
+#ifdef PLATFORM_PS3
+        if (i < gl->originalTexturePageCount) continue;
+#endif
+        if (!gl->textureLoaded[i] || !gl->glTextures[i]) continue;
+        glBindTexture(GL_TEXTURE_2D, gl->glTextures[i]);
+        GLCommon_applyTexFilter(enable);
+    }
+    for (uint32_t i = 0; i < gl->surfaceCount; i++) {
+        if (!gl->surfaceTexture[i]) continue;
+        glBindTexture(GL_TEXTURE_2D, gl->surfaceTexture[i]);
+        GLCommon_applyTexFilter(enable);
+    }
+    glBindTexture(GL_TEXTURE_2D, (GLuint) previousBinding);
 }
 
 void GLCommon_applyViewport(GLRenderer* gl, int32_t portX, int32_t portY, int32_t portW, int32_t portH) {
@@ -379,6 +409,45 @@ bool GLCommon_surfaceGetPixels(GLuint* surfaces, int32_t* surfaceWidth, int32_t*
     glPixelStorei(GL_PACK_ALIGNMENT, prevPackAlign);
     glBindFramebuffer(GL_FRAMEBUFFER, (GLuint) prevFbo);
     return true;
+}
+
+bool GLCommon_surfaceSetPixels(Renderer* renderer, int32_t surfaceId, const uint8_t* rgba) {
+    GLRenderer* gl = (GLRenderer*)renderer;
+    if (rgba == nullptr || surfaceId < 0 || (uint32_t)surfaceId >= gl->surfaceCount ||
+        gl->surfaces[surfaceId] == 0 || gl->surfaceTexture[surfaceId] == 0) return false;
+
+    int32_t w = gl->surfaceWidth[surfaceId];
+    int32_t h = gl->surfaceHeight[surfaceId];
+    if (w <= 0 || h <= 0 || (size_t)w > ((size_t)-1) / 4 / (size_t)h) return false;
+
+    // Complete queued draws before replacing the pixels of their render target.
+    renderer->vtable->flush(renderer);
+
+    size_t rowBytes = (size_t)w * 4;
+    uint8_t* flipped = (uint8_t*)safeMalloc(rowBytes * (size_t)h);
+    for (int32_t y = 0; y < h; y++) {
+        memcpy(flipped + (size_t)y * rowBytes, rgba + (size_t)(h - 1 - y) * rowBytes, rowBytes);
+    }
+
+    GLint previousTexture = 0;
+    GLint previousUnpackAlignment = 4;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
+    glBindTexture(GL_TEXTURE_2D, gl->surfaceTexture[surfaceId]);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, flipped);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)previousTexture);
+    free(flipped);
+    return true;
+}
+
+void GLCommon_surfaceUploadPixels(Renderer* renderer, int32_t surfaceId, int32_t w, int32_t h, const uint8_t* rgba) {
+    GLRenderer* gl = (GLRenderer*)renderer;
+    if (gl->surfaceTexture == nullptr || surfaceId < 0 || (uint32_t)surfaceId >= gl->surfaceCount) return;
+    if (gl->surfaceTexture[surfaceId] == 0) return;
+    glBindTexture(GL_TEXTURE_2D, gl->surfaceTexture[surfaceId]);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
 }
 
 #ifndef PLATFORM_PS3
