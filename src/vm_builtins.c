@@ -2003,6 +2003,38 @@ static RValue builtin_string(MAYBE_UNUSED VMContext* ctx, RValue* args, int32_t 
     return RValue_makeOwnedString(result);
 }
 
+// @@string@@
+static RValue builtin_interpolated_string(VMContext* ctx, RValue* args, int32_t argCount) {
+    REQUIRE_ARGC_AT_LEAST("@@string@@", 1, RValue_makeOwnedString(safeStrdup("")));
+    char* format = RValue_toString(args[0], ctx->runner->dataWin);
+    if (argCount <= 1) return RValue_makeOwnedString(format);
+    StringBuilder result = StringBuilder_create(strlen(format) + 1);
+
+    for (size_t i = 0; format[i] != '\0';) {
+        if (format[i] == '{' && format[i + 1] >= '0' && format[i + 1] <= '9') {
+            size_t j = i + 1;
+            size_t index = 0;
+            while (format[j] >= '0' && format[j] <= '9') {
+                if (index < (size_t)argCount) index = index * 10 + (size_t)(format[j] - '0');
+                j++;
+            }
+            if (format[j] == '}' && index < (size_t)(argCount - 1)) {
+                char* value = RValue_toString(args[index + 1], ctx->runner->dataWin);
+                StringBuilder_append(&result, value);
+                free(value);
+                i = j + 1;
+            } else {
+                StringBuilder_appendChar(&result, format[i++]);
+            }
+        } else {
+            StringBuilder_appendChar(&result, format[i++]);
+        }
+    }
+
+    free(format);
+    return RValue_makeOwnedString(result.buffer);
+}
+
 // string_byte_at
 static RValue builtin_string_byte_at(VMContext* ctx, RValue* args, int32_t argCount) {
     REQUIRE_ARGC_AT_LEAST("string_byte_at", 2, RValue_makeInt32(0));
@@ -22102,6 +22134,7 @@ void VMBuiltins_registerAll(VMContext* ctx) {
     VM_registerBuiltin(ctx, "string_lettersdigits", builtin_string_lettersdigits);
     VM_registerBuiltin(ctx, "string_byte_length", builtin_string_byte_length);
     VM_registerBuiltin(ctx, "string", builtin_string);
+    VM_registerBuiltin(ctx, "@@string@@", builtin_interpolated_string);
     VM_registerBuiltin(ctx, "string_byte_at", builtin_string_byte_at);
     VM_registerBuiltin(ctx, "bool", builtin_bool);
     VM_registerBuiltin(ctx, "string_upper", builtin_string_upper);
