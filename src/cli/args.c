@@ -6,7 +6,7 @@
 #include <unistd.h>
 #endif
 
-bool parseOsTypeArg(const char* s, YoYoOperatingSystem* out) {
+static bool parseOsTypeArg(const char* s, YoYoOperatingSystem* out) {
     forEach(const OsTypeNameEntry, entry, OS_TYPE_NAMES, OS_TYPE_NAMES_COUNT) {
         if (strcmp(s, entry->name) == 0) {
             *out = entry->value;
@@ -16,13 +16,13 @@ bool parseOsTypeArg(const char* s, YoYoOperatingSystem* out) {
     return false;
 }
 
-void printOsTypeNames(FILE* out) {
+static void printOsTypeNames(FILE* out) {
     forEachIndexed(const OsTypeNameEntry, entry, i, OS_TYPE_NAMES, OS_TYPE_NAMES_COUNT) {
         fprintf(out, "%s%s", i > 0 ? ", " : "", entry->name);
     }
 }
 
-void printUsage(const char *argv0) {
+static void printUsage(const char *argv0) {
     logInfo(
         "Usage: %s <path to data.win or game.unx>\n"
         "    --help                                 - Show this message\n"
